@@ -1,0 +1,690 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>다중 섬광 사진 생성기 (카메라/업로드 · 자동구간 · 10fps · 5초)</title>
+  <style>
+    :root{
+      --primary:#6366f1; --secondary:#8b5cf6; --success:#10b981;
+      --dark:#0f172a; --card:#1e293b; --text:#f1f5f9; --muted:#94a3b8; --border:#334155;
+      --shadow:0 10px 30px rgba(0,0,0,.3);
+    }
+    *{margin:0;padding:0;box-sizing:border-box}
+    body{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;background:linear-gradient(135deg,#0f172a,#1e293b);color:var(--text);min-height:100vh;line-height:1.6}
+    .container{max-width:1120px;margin:0 auto;padding:20px}
+    header{text-align:center;padding:34px 20px;background:linear-gradient(135deg,var(--primary),var(--secondary));border-radius:20px;margin-bottom:22px;box-shadow:var(--shadow)}
+    header h1{font-size:2.1rem;margin-bottom:6px;text-shadow:0 2px 10px rgba(0,0,0,.25)}
+    header .subtitle{font-size:1rem;color:rgba(255,255,255,.92);max-width:820px;margin:0 auto}
+    main{display:flex;flex-direction:column;gap:16px}
+    section{background:var(--card);border-radius:14px;padding:22px;box-shadow:var(--shadow);border:1px solid var(--border)}
+    section h2{font-size:1.45rem;margin-bottom:14px;color:var(--primary)}
+    section h3{font-size:1.2rem;margin-bottom:12px}
+    .upload-area{border:3px dashed var(--border);border-radius:14px;padding:52px 26px;text-align:center;cursor:pointer;transition:all .25s;background:rgba(99,102,241,.05)}
+    .upload-area:hover{border-color:var(--primary);background:rgba(99,102,241,.1);transform:translateY(-3px)}
+    .upload-area.drag-over{border-color:var(--success);background:rgba(16,185,129,.1)}
+    .upload-icon{width:62px;height:62px;margin:0 auto 14px;color:var(--primary)}
+    .upload-area h3{font-size:1.35rem;margin-bottom:6px}
+    .upload-area p{color:var(--muted);font-size:.95rem;margin:2px 0}
+    .video-preview{text-align:center}
+    .video-preview video{max-width:100%;max-height:360px;border-radius:10px;box-shadow:0 5px 20px rgba(0,0,0,.4);margin-bottom:12px}
+    .video-info{display:flex;flex-direction:column;gap:10px;align-items:center}
+    .video-info p{color:var(--muted)}
+    .settings-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;margin-bottom:16px}
+    .setting-item{display:flex;flex-direction:column;gap:7px}
+    .setting-item label{font-weight:650;font-size:.92rem}
+    .setting-item input[type=number], .setting-item select{
+      padding:10px 12px;border:2px solid var(--border);border-radius:8px;background:var(--dark);color:var(--text);
+      font-size:.95rem;transition:all .2s
+    }
+    .setting-item input:focus, .setting-item select:focus{outline:none;border-color:var(--primary);box-shadow:0 0 0 3px rgba(99,102,241,.2)}
+    .setting-item input[type=range]{width:100%;height:7px;border-radius:4px;background:var(--dark);outline:none;-webkit-appearance:none}
+    .setting-item input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:18px;height:18px;border-radius:50%;background:var(--primary);cursor:pointer}
+    .desc{font-size:.82rem;color:var(--muted)}
+    .slider-val{font-weight:800;color:var(--primary)}
+    .btn{padding:12px 28px;border:none;border-radius:10px;font-size:1rem;font-weight:650;cursor:pointer;transition:all .2s;display:inline-flex;align-items:center;justify-content:center;gap:8px}
+    .btn:hover{transform:translateY(-2px);box-shadow:0 5px 18px rgba(0,0,0,.28)}
+    .btn-primary{background:linear-gradient(135deg,var(--primary),var(--secondary));color:#fff;width:100%;font-size:1.08rem;padding:16px}
+    .btn-secondary{background:var(--dark);color:var(--text);border:2px solid var(--border)}
+    .btn-secondary:hover{border-color:var(--primary)}
+    .btn-success{background:var(--success);color:#fff}
+    .btn-success:hover{background:#059669}
+    .progress-bar{width:100%;height:24px;background:var(--dark);border-radius:13px;overflow:hidden;margin-bottom:8px}
+    .progress-fill{height:100%;width:0%;background:linear-gradient(90deg,var(--primary),var(--secondary));border-radius:13px;transition:width .2s;position:relative;overflow:hidden}
+    .progress-fill::after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,transparent,rgba(255,255,255,.22),transparent);animation:shimmer 1.8s infinite}
+    @keyframes shimmer{from{transform:translateX(-100%)}to{transform:translateX(100%)}}
+    .progress-text{text-align:center;font-size:.95rem;color:var(--muted)}
+    .compare{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px}
+    .compare-item{text-align:center}
+    .compare-item p{font-size:.85rem;color:var(--muted);margin-bottom:6px}
+    .compare-item canvas{max-width:100%;border-radius:8px;border:1px solid var(--border)}
+    .result-actions{display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
+    .result-actions .btn{flex:1;min-width:160px;max-width:260px}
+    .hintbox{margin-top:10px;padding:12px;border-radius:10px;border:1px solid var(--border);background:rgba(255,255,255,.04);color:var(--muted);font-size:.92rem}
+    .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace}
+    footer{text-align:center;padding:22px 10px;margin-top:18px;color:var(--muted);border-top:1px solid var(--border)}
+    @media(max-width:720px){ header h1{font-size:1.6rem} section{padding:16px} .compare{grid-template-columns:1fr} .result-actions{flex-direction:column} }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>✨ 다중 섬광 사진 생성기</h1>
+      <p class="subtitle">
+        <b>움직임이 시작되는 구간을 자동 탐지</b>한 뒤, 그 구간에서만 <b>1초당 10컷</b>으로 프레임을 뽑아 (최대 5초)
+        <b>배경은 그대로</b> 두고 <b>움직이는 물체만</b> 한 장에 합성합니다.
+      </p>
+    </header>
+
+    <main>
+      <!-- 업로드 -->
+      <section>
+        <div class="upload-area" id="uploadArea">
+          <svg class="upload-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+            <polyline points="17 8 12 3 7 8"/>
+            <line x1="12" y1="3" x2="12" y2="15"/>
+          </svg>
+          <h3>동영상을 업로드하세요</h3>
+          <p>클릭하거나 드래그 앤 드롭</p>
+          <p>MP4, MOV, WebM 지원</p>
+          <p style="margin-top:10px;"><button class="btn btn-secondary" id="cameraBtn" type="button">📷 카메라로 5초 촬영</button></p>
+          <input type="file" id="videoInput" accept="video/*" hidden />
+        </div>
+
+        <div class="video-preview" id="videoPreview" style="display:none;">
+          <video id="previewVideo" controls playsinline></video>
+          <div class="video-info">
+            <p id="videoFileName"></p>
+            <button class="btn btn-secondary" id="changeVideoBtn">다른 동영상 선택</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- 설정 -->
+      <section id="settingsSection" style="display:none;">
+        <h2>설정</h2>
+        <div class="settings-grid">
+          <div class="setting-item">
+            <label>초당 추출 컷 수 (FPS)</label>
+            <input type="number" id="fpsExtract" value="20" min="5" max="60" />
+            <span class="desc">움직임 구간에서만 적용 (기본 20fps)</span>
+          </div>
+
+          <div class="setting-item">
+            <label>움직임 탐지 민감도 <span class="slider-val" id="motionVal">18</span></label>
+            <input type="range" id="motionScoreThr" min="8" max="45" value="18" />
+            <span class="desc">낮을수록 민감(흔들림도 탐지) / 높을수록 큰 움직임만</span>
+          </div>
+
+          <div class="setting-item">
+            <label>움직임 탐지 샘플링 (fps)</label>
+            <input type="number" id="detectFps" value="5" min="2" max="12" />
+            <span class="desc">움직임 구간 찾는 속도/정확도 (기본 5fps)</span>
+          </div>
+
+          <div class="setting-item">
+            <label>배경 합성 방식</label>
+            <select id="bgMode">
+              <option value="first">첫 프레임을 배경으로</option>
+              <option value="median" selected>중앙값 배경 추정 (권장)</option>
+              <option value="last">마지막 프레임을 배경으로</option>
+            </select>
+            <span class="desc">중앙값: 움직이는 물체가 사라진 배경을 추정</span>
+          </div>
+
+          <div class="setting-item">
+            <label>배경 추정 샘플링 간격</label>
+            <input type="number" id="bgStride" value="2" min="1" max="10" />
+            <span class="desc">2면 2프레임마다 1장만 사용(속도↑). 1이면 전부 사용(정확도↑)</span>
+          </div>
+
+          <div class="setting-item">
+            <label>움직임 합성 임계값 <span class="slider-val" id="thrVal">25</span></label>
+            <input type="range" id="threshold" min="5" max="100" value="25" />
+            <span class="desc">낮을수록 민감 / 높을수록 큰 차이만 합성</span>
+          </div>
+
+          <div class="setting-item">
+            <label>물체 합성 방식</label>
+            <select id="blendMode">
+              <option value="copy" selected>그대로 덮어쓰기 (선명)</option>
+              <option value="lighten">밝은 픽셀 우선 (Lighten)</option>
+              <option value="darken">어두운 픽셀 우선 (Darken)</option>
+            </select>
+            <span class="desc">배경 위에 물체 픽셀을 올리는 방식</span>
+          </div>
+
+          <div class="setting-item">
+            <label>최대 추출 프레임 (성능 보호)</label>
+            <input type="number" id="maxFrames" value="800" min="100" max="5000" />
+            <span class="desc">너무 긴 영상 과부하 방지 (길면 크게 올리세요)</span>
+          </div>
+        </div>
+
+        <button class="btn btn-primary" id="generateBtn">🎨 다중 섬광 사진 생성</button>
+
+        <div class="hintbox">
+          ✅ 흐름: <span class="mono">움직임 구간 자동 탐지 → (그 구간만) 10fps 추출 → 중앙값 배경 추정 → 움직이는 물체 합성</span><br/>
+          ✅ “처음/끝 정지 구간”은 자동으로 제외됩니다.
+        </div>
+      </section>
+
+      <!-- 진행 -->
+      <section id="progressSection" style="display:none;">
+        <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+        <p class="progress-text" id="progressText">준비 중...</p>
+      </section>
+
+      <!-- 결과 -->
+      <section id="resultSection" style="display:none;">
+        <h2>✨ 결과</h2>
+        <div class="compare">
+          <div class="compare-item">
+            <p>추출된 배경</p>
+            <canvas id="bgCanvas"></canvas>
+          </div>
+          <div class="compare-item">
+            <p>다중 섬광 합성 결과</p>
+            <canvas id="resultCanvas"></canvas>
+          </div>
+        </div>
+
+        <div class="result-actions">
+          <button class="btn btn-success" id="downloadBtn">💾 결과 다운로드</button>
+          <button class="btn btn-secondary" id="downloadBgBtn">📷 배경만 다운로드</button>
+          <button class="btn btn-secondary" id="resetBtn">🔄 새로 만들기</button>
+        </div>
+
+        <div class="hintbox" id="motionInfo" style="margin-top:12px;"></div>
+      </section>
+    </main>
+
+    <footer>© 2026 다중 섬광 사진 생성기 | 모든 처리는 브라우저에서만 실행됩니다</footer>
+  </div>
+
+  <canvas id="hiddenCanvas" style="display:none;"></canvas>
+
+  <script>
+    class StrobeGenerator {
+      constructor() {
+        this.frames = [];
+        this.thumbUrls = [];
+        this.bgImageData = null;
+        this.init();
+      }
+
+      init() {
+        this.uploadArea   = document.getElementById('uploadArea');
+        this.videoInput   = document.getElementById('videoInput');
+        this.cameraBtn   = document.getElementById('cameraBtn');
+        this.videoPreview = document.getElementById('videoPreview');
+        this.previewVideo = document.getElementById('previewVideo');
+        this.hiddenCanvas = document.getElementById('hiddenCanvas');
+        this.bgCanvas     = document.getElementById('bgCanvas');
+        this.resultCanvas = document.getElementById('resultCanvas');
+        this.setupEvents();
+      }
+
+      setupEvents() {
+        this.uploadArea.addEventListener('click', () => this.videoInput.click());
+        this.uploadArea.addEventListener('dragover', e => { e.preventDefault(); this.uploadArea.classList.add('drag-over'); });
+        this.uploadArea.addEventListener('dragleave', () => this.uploadArea.classList.remove('drag-over'));
+        this.uploadArea.addEventListener('drop', e => {
+          e.preventDefault(); this.uploadArea.classList.remove('drag-over');
+          const f = e.dataTransfer.files[0];
+          if (f && f.type.startsWith('video/')) this.loadVideo(f);
+        });
+        this.videoInput.addEventListener('change', e => { if (e.target.files[0]) this.loadVideo(e.target.files[0]); });
+
+        this.cameraBtn.addEventListener('click', (e) => { e.stopPropagation(); this.captureFromCamera(); });
+
+        document.getElementById('changeVideoBtn').addEventListener('click', () => this.resetUpload());
+        document.getElementById('generateBtn').addEventListener('click', () => this.generate());
+        document.getElementById('downloadBtn').addEventListener('click', () => this.download(this.resultCanvas, 'strobe'));
+        document.getElementById('downloadBgBtn').addEventListener('click', () => this.download(this.bgCanvas, 'background'));
+        document.getElementById('resetBtn').addEventListener('click', () => this.resetResult());
+
+        document.getElementById('threshold').addEventListener('input', e => {
+          document.getElementById('thrVal').textContent = e.target.value;
+        });
+        document.getElementById('motionScoreThr').addEventListener('input', e => {
+          document.getElementById('motionVal').textContent = e.target.value;
+        });
+      }
+
+      async captureFromCamera() {
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+          alert('이 브라우저는 카메라 촬영을 지원하지 않습니다.');
+          return;
+        }
+        if (typeof MediaRecorder === 'undefined') {
+          alert('이 브라우저는 MediaRecorder를 지원하지 않습니다. (Chrome/Edge 권장)');
+          return;
+        }
+
+        // UI 전환(기존 레이아웃 그대로 사용)
+        this.uploadArea.parentElement.style.display = 'none';
+        this.videoPreview.style.display = 'block';
+        document.getElementById('settingsSection').style.display = 'block';
+        document.getElementById('videoFileName').textContent = '파일명: (카메라 촬영 5초)';
+        this.previewVideo.controls = false;
+
+        let stream = null;
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } },
+            audio: false
+          });
+        } catch (e) {
+          alert('카메라 접근 실패: ' + e.message);
+          // UI 복구
+          this.resetUpload();
+          return;
+        }
+
+        // 라이브 프리뷰
+        this.previewVideo.srcObject = stream;
+        try { await this.previewVideo.play(); } catch {}
+
+        // 5초 촬영
+        const chunks = [];
+        const rec = new MediaRecorder(stream, { mimeType: MediaRecorder.isTypeSupported('video/webm;codecs=vp9') ? 'video/webm;codecs=vp9' : 'video/webm' });
+
+        rec.ondataavailable = (ev) => { if (ev.data && ev.data.size > 0) chunks.push(ev.data); };
+
+        const done = new Promise((resolve) => {
+          rec.onstop = () => resolve();
+        });
+
+        rec.start();
+
+        // 진행 표시
+        document.getElementById('progressSection').style.display = 'block';
+        this.setProgress(0, '카메라 촬영 중... (5초)');
+        const start = Date.now();
+        const tick = setInterval(() => {
+          const t = Math.min(1, (Date.now() - start) / 5000);
+          this.setProgress(Math.round(t * 20), `카메라 촬영 중... (${(5 - 5*t).toFixed(1)}s 남음)`);
+        }, 100);
+
+        setTimeout(() => {
+          try { rec.stop(); } catch {}
+        }, 5000);
+
+        await done;
+        clearInterval(tick);
+        this.setProgress(20, '촬영 완료 — 분석 준비 중...');
+        await this.tick();
+
+        // 스트림 종료
+        try { stream.getTracks().forEach(t => t.stop()); } catch {}
+
+        // blob -> 업로드 영상처럼 처리
+        const blob = new Blob(chunks, { type: rec.mimeType || 'video/webm' });
+        const url = URL.createObjectURL(blob);
+
+        this.previewVideo.pause();
+        this.previewVideo.srcObject = null;
+        this.previewVideo.src = url;
+        this.previewVideo.controls = true;
+
+        // metadata 로드 기다림
+        await new Promise((res) => this.previewVideo.addEventListener('loadedmetadata', res, { once:true }));
+
+        document.getElementById('progressSection').style.display = 'none';
+      }
+
+      loadVideo(file) {
+        this.previewVideo.src = URL.createObjectURL(file);
+        document.getElementById('videoFileName').textContent = `파일명: ${file.name}`;
+        this.uploadArea.parentElement.style.display = 'none';
+        this.videoPreview.style.display = 'block';
+        document.getElementById('settingsSection').style.display = 'block';
+      }
+
+      resetUpload() {
+        this.videoInput.value = '';
+        this.previewVideo.src = '';
+        this.uploadArea.parentElement.style.display = 'block';
+        this.videoPreview.style.display = 'none';
+        ['settingsSection','progressSection','resultSection'].forEach(id => document.getElementById(id).style.display = 'none');
+      }
+
+      resetResult() {
+        this.frames = [];
+        this.thumbUrls = [];
+        this.bgImageData = null;
+        document.getElementById('resultSection').style.display = 'none';
+        document.getElementById('settingsSection').style.display = 'block';
+        document.getElementById('motionInfo').innerHTML = '';
+      }
+
+      async generate() {
+        // ⭐ 고정 설정: 1초당 10컷(10fps)로 추출 (UI 구조는 그대로)
+        const fpsEl = document.getElementById('fpsExtract');
+        if (fpsEl) fpsEl.value = 10;
+        const fpsExtract     = parseInt(document.getElementById('fpsExtract').value, 10);
+        const threshold      = parseInt(document.getElementById('threshold').value, 10);
+        const bgMode         = document.getElementById('bgMode').value;
+        const blendMode      = document.getElementById('blendMode').value;
+        const bgStride       = parseInt(document.getElementById('bgStride').value, 10);
+        const detectFps      = parseFloat(document.getElementById('detectFps').value);
+        const motionScoreThr = parseFloat(document.getElementById('motionScoreThr').value);
+        const maxFrames      = parseInt(document.getElementById('maxFrames').value, 10);
+
+        document.getElementById('progressSection').style.display = 'block';
+        document.getElementById('resultSection').style.display = 'none';
+
+        try {
+          // 0) 움직임 구간 탐지
+          this.setProgress(0, '움직임 구간 분석 중...');
+          const win = await this.detectMotionWindow(this.previewVideo.src, detectFps, motionScoreThr, 2);
+
+          // ⭐ 5초 제한: 움직임 시작 시점부터 최대 5초만 사용
+          const limitedEnd = Math.min(win.endTime, win.startTime + 5);
+          const winLimited = { ...win, endTime: limitedEnd, duration: Math.max(0, limitedEnd - win.startTime), note: win.note + '+limit5s' };
+
+          // 1) 구간만 fps로 프레임 추출
+          this.setProgress(6, `프레임 추출 준비... (${winLimited.startTime.toFixed(2)}s ~ ${winLimited.endTime.toFixed(2)}s)`);
+          const { frames, usedStart, usedEnd } =
+            await this.extractFramesByFps(this.previewVideo.src, fpsExtract, winLimited.startTime, winLimited.endTime, maxFrames);
+
+          this.frames = frames;
+
+          // 2) 배경 추정 (stride 적용)
+          this.setProgress(58, '배경 추정 중...');
+          const framesForBg = this.strideFrames(frames, bgStride);
+          this.bgImageData = await this.estimateBackground(framesForBg, bgMode);
+
+          this.bgCanvas.width = this.bgImageData.width;
+          this.bgCanvas.height = this.bgImageData.height;
+          this.bgCanvas.getContext('2d', { willReadFrequently:true }).putImageData(this.bgImageData, 0, 0);
+
+          // 3) 다중 섬광 합성
+          this.setProgress(70, '움직이는 물체 합성 중...');
+          await this.compositeStrobe(frames, this.bgImageData, threshold, blendMode);
+
+          this.setProgress(100, '완료!');
+          document.getElementById('progressSection').style.display = 'none';
+          document.getElementById('resultSection').style.display = 'block';
+
+          const info = document.getElementById('motionInfo');
+          info.innerHTML =
+            `🟢 움직임 구간(자동, 5초 제한 적용): <b>${winLimited.startTime.toFixed(2)}s ~ ${winLimited.endTime.toFixed(2)}s</b> (메모: <span class="mono">${win.note}</span>)<br/>` +
+            `🟣 실제 추출 구간: <b>${usedStart.toFixed(2)}s ~ ${usedEnd.toFixed(2)}s</b><br/>` +
+            `🟡 추출: <b>${frames.length}컷</b> (fps=${fpsExtract}) / 배경 추정 프레임: <b>${framesForBg.length}컷</b> (stride=${bgStride})`;
+
+        } catch (err) {
+          console.error(err);
+          alert('오류: ' + err.message);
+          document.getElementById('progressSection').style.display = 'none';
+        }
+      }
+
+      strideFrames(frames, stride) {
+        if (!stride || stride <= 1) return frames;
+        const out = [];
+        for (let i = 0; i < frames.length; i += stride) out.push(frames[i]);
+        return out.length ? out : frames;
+      }
+
+      // =========================
+      //  움직임 구간 자동 탐지
+      // =========================
+      async detectMotionWindow(videoSrc, detectFps=5, motionScoreThr=18, stableNeed=2) {
+        const video = document.createElement('video');
+        video.src = videoSrc;
+        video.muted = true;
+
+        await new Promise((res, rej) => {
+          video.addEventListener('loadedmetadata', res, { once:true });
+          video.addEventListener('error', () => rej(new Error('동영상 로드 실패')), { once:true });
+        });
+
+        const dur = video.duration;
+        const step = 1 / Math.max(1, detectFps);
+
+        let prev = await this.sampleFrameAt(video, 0);
+        let started = false;
+        let startTime = 0;
+        let endTime = dur;
+
+        let stableCount = 0;
+        let lastMovingTime = 0;
+
+        const totalSteps = Math.max(1, Math.ceil(dur / step));
+
+        for (let si = 1; si <= totalSteps; si++) {
+          const t = Math.min(dur, si * step);
+          const cur = await this.sampleFrameAt(video, t);
+
+          const score = this.frameDiffScore(prev, cur);
+
+          if (!started) {
+            if (score >= motionScoreThr) {
+              started = true;
+              startTime = Math.max(0, t - step); // 살짝 앞당김
+              lastMovingTime = t;
+              stableCount = 0;
+            }
+          } else {
+            if (score >= motionScoreThr) {
+              lastMovingTime = t;
+              stableCount = 0;
+            } else {
+              stableCount++;
+              if (stableCount >= stableNeed) {
+                endTime = lastMovingTime;
+                break;
+              }
+            }
+          }
+
+          prev = cur;
+
+          if (si % 4 === 0) {
+            const pct = Math.min(5, Math.round((si / totalSteps) * 5));
+            this.setProgress(pct, `움직임 구간 분석 중... (${Math.round((si/totalSteps)*100)}%)`);
+            await this.tick();
+          }
+        }
+
+        if (started && endTime === dur) endTime = Math.min(dur, lastMovingTime);
+        if (!started) return { startTime: 0, endTime: dur, duration: dur, note: 'motion_not_found(전체 사용)' };
+        if (endTime - startTime < 0.2) return { startTime: 0, endTime: dur, duration: dur, note: 'motion_too_short(전체 사용)' };
+
+        return { startTime, endTime, duration: endTime - startTime, note: 'ok' };
+      }
+
+      async sampleFrameAt(video, t, w=160, h=90) {
+        return new Promise((resolve) => {
+          const canvas = this.hiddenCanvas;
+          const ctx = canvas.getContext('2d', { willReadFrequently: true });
+
+          const onSeeked = () => {
+            video.removeEventListener('seeked', onSeeked);
+            canvas.width = w; canvas.height = h;
+            ctx.drawImage(video, 0, 0, w, h);
+            resolve(ctx.getImageData(0, 0, w, h));
+          };
+
+          video.addEventListener('seeked', onSeeked);
+          video.currentTime = t;
+        });
+      }
+
+      frameDiffScore(a, b) {
+        const ad = a.data, bd = b.data;
+        let sum = 0;
+        for (let i = 0; i < ad.length; i += 4) {
+          sum += Math.abs(ad[i]-bd[i]) + Math.abs(ad[i+1]-bd[i+1]) + Math.abs(ad[i+2]-bd[i+2]);
+        }
+        return sum / (ad.length / 4);
+      }
+
+      // =========================
+      //  fps 기반 프레임 추출
+      // =========================
+      extractFramesByFps(videoSrc, fps, startTime, endTime, maxFrames=800) {
+        return new Promise((resolve, reject) => {
+          const video = document.createElement('video');
+          video.src = videoSrc;
+          video.muted = true;
+
+          const frames = [];
+          let idx = 0;
+
+          video.addEventListener('loadedmetadata', () => {
+            const dur = video.duration;
+            const s = Math.max(0, startTime);
+            const e = Math.min(dur, endTime);
+
+            const interval = 1 / Math.max(1, fps);
+            let frameCount = Math.max(1, Math.floor((e - s) * fps));
+
+            if (frameCount > maxFrames) frameCount = maxFrames;
+
+            const usedEnd = Math.min(e, s + frameCount * interval);
+
+            const canvas = this.hiddenCanvas;
+            const ctx = canvas.getContext('2d', { willReadFrequently: true });
+
+            const seek = () => {
+              if (idx >= frameCount) {
+                resolve({ frames, usedStart: s, usedEnd });
+                return;
+              }
+              video.currentTime = s + idx * interval;
+            };
+
+            video.addEventListener('seeked', () => {
+              canvas.width = video.videoWidth;
+              canvas.height = video.videoHeight;
+              ctx.drawImage(video, 0, 0);
+              frames.push(ctx.getImageData(0, 0, canvas.width, canvas.height));
+
+              idx++;
+              this.setProgress(Math.min(55, Math.round((idx / frameCount) * 55)),
+                `프레임 추출 중... (${idx} / ${frameCount})`);
+              seek();
+            });
+
+            seek();
+          });
+
+          video.addEventListener('error', () => reject(new Error('동영상 로드 실패')));
+        });
+      }
+
+      // =========================
+      //  배경 추정
+      // =========================
+      async estimateBackground(frames, mode) {
+        const N = frames.length;
+        const W = frames[0].width;
+        const H = frames[0].height;
+        const out = new Uint8ClampedArray(W * H * 4);
+
+        if (mode === 'first') {
+          out.set(frames[0].data);
+          return new ImageData(out, W, H);
+        }
+        if (mode === 'last') {
+          out.set(frames[N-1].data);
+          return new ImageData(out, W, H);
+        }
+
+        const mid = Math.floor(N / 2);
+        const buf = new Uint8Array(N);
+
+        for (let i = 0; i < W * H; i++) {
+          const p = i * 4;
+          for (let c = 0; c < 3; c++) {
+            for (let f = 0; f < N; f++) buf[f] = frames[f].data[p + c];
+            out[p + c] = this.quickSelect(buf, N, mid);
+          }
+          out[p + 3] = 255;
+
+          if (i % 50000 === 0) {
+            this.setProgress(58 + Math.round((i / (W * H)) * 10),
+              `배경 추정 중... ${Math.round((i / (W * H)) * 100)}%`);
+            await this.tick();
+          }
+        }
+        return new ImageData(out, W, H);
+      }
+
+      quickSelect(arr, n, k) {
+        const a = arr.slice(0, n).sort((x, y) => x - y);
+        return a[k];
+      }
+
+      // =========================
+      //  다중 섬광 합성
+      // =========================
+      async compositeStrobe(frames, bgData, threshold, blendMode) {
+        const N = frames.length;
+        const W = bgData.width;
+        const H = bgData.height;
+        const bg = bgData.data;
+
+        const out = new Uint8ClampedArray(bg);
+
+        for (let f = 0; f < N; f++) {
+          const fd = frames[f].data;
+
+          for (let i = 0; i < W * H; i++) {
+            const p = i * 4;
+
+            const dr = Math.abs(fd[p]   - bg[p]);
+            const dg = Math.abs(fd[p+1] - bg[p+1]);
+            const db = Math.abs(fd[p+2] - bg[p+2]);
+            const diff = Math.max(dr, dg, db);
+
+            if (diff > threshold) {
+              if (blendMode === 'copy') {
+                out[p] = fd[p]; out[p+1] = fd[p+1]; out[p+2] = fd[p+2];
+              } else if (blendMode === 'lighten') {
+                out[p] = Math.max(out[p], fd[p]);
+                out[p+1] = Math.max(out[p+1], fd[p+1]);
+                out[p+2] = Math.max(out[p+2], fd[p+2]);
+              } else {
+                out[p] = Math.min(out[p], fd[p]);
+                out[p+1] = Math.min(out[p+1], fd[p+1]);
+                out[p+2] = Math.min(out[p+2], fd[p+2]);
+              }
+              out[p+3] = 255;
+            }
+          }
+
+          this.setProgress(70 + Math.round((f / N) * 28),
+            `물체 합성 중... (${f + 1} / ${N})`);
+          if (f % 5 === 0) await this.tick();
+        }
+
+        this.resultCanvas.width = W;
+        this.resultCanvas.height = H;
+        this.resultCanvas.getContext('2d', { willReadFrequently:true })
+          .putImageData(new ImageData(out, W, H), 0, 0);
+      }
+
+      tick(){ return new Promise(r => setTimeout(r, 0)); }
+
+      setProgress(pct, text) {
+        document.getElementById('progressFill').style.width = `${pct}%`;
+        document.getElementById('progressText').textContent = text;
+      }
+
+      download(canvas, name) {
+        const a = document.createElement('a');
+        a.download = `${name}-${Date.now()}.png`;
+        a.href = canvas.toDataURL('image/png');
+        a.click();
+      }
+    }
+
+    document.addEventListener('DOMContentLoaded', () => new StrobeGenerator());
+  </script>
+</body>
+</html>
