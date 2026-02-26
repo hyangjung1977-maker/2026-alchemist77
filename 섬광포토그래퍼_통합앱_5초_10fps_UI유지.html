@@ -1,0 +1,987 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>섬광 포토그래퍼 (통합)</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Noto+Sans+KR:wght@300;400;700&display=swap');
+
+  :root {
+    --black: #080808;
+    --white: #f5f0e8;
+    --red: #ff2b2b;
+    --amber: #ffaa00;
+    --gray: #1a1a1a;
+    --mid: #333;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--black);
+    color: var(--white);
+    font-family: 'Noto Sans KR', sans-serif;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* GRAIN OVERLAY */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
+    pointer-events: none;
+    z-index: 9999;
+    opacity: 0.35;
+  }
+
+  .app {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 40px 24px 80px;
+  }
+
+  /* HEADER */
+  header {
+    text-align: center;
+    margin-bottom: 56px;
+  }
+
+  .logo {
+    font-family: 'Bebas Neue', cursive;
+    font-size: clamp(48px, 10vw, 96px);
+    letter-spacing: 0.08em;
+    line-height: 0.9;
+    color: var(--white);
+    position: relative;
+    display: inline-block;
+  }
+
+  .logo span {
+    color: var(--red);
+  }
+
+  .logo::after {
+    content: 'STROBOSCOPIC';
+    position: absolute;
+    top: 4px;
+    left: 4px;
+    color: var(--amber);
+    opacity: 0.15;
+    z-index: -1;
+  }
+
+  .tagline {
+    font-size: 13px;
+    letter-spacing: 0.3em;
+    text-transform: uppercase;
+    color: #666;
+    margin-top: 12px;
+    font-weight: 300;
+  }
+
+  /* VIEWFINDER */
+  .viewfinder-wrap {
+    position: relative;
+    background: #0d0d0d;
+    border: 1px solid #222;
+    overflow: hidden;
+    aspect-ratio: 16/9;
+    margin-bottom: 32px;
+  }
+
+  .viewfinder-wrap::before,
+  .viewfinder-wrap::after {
+    content: '';
+    position: absolute;
+    width: 24px;
+    height: 24px;
+    z-index: 10;
+  }
+  .viewfinder-wrap::before { top: 12px; left: 12px; border-top: 2px solid var(--amber); border-left: 2px solid var(--amber); }
+  .viewfinder-wrap::after { bottom: 12px; right: 12px; border-bottom: 2px solid var(--amber); border-right: 2px solid var(--amber); }
+
+  #video {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+
+  .result-canvas-wrap {
+    width: 100%;
+    height: 100%;
+    position: absolute;
+    inset: 0;
+    display: none;
+  }
+
+  #resultCanvas {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+  }
+
+  /* HUD */
+  .hud {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 5;
+  }
+
+  .hud-top {
+    position: absolute;
+    top: 16px;
+    right: 16px;
+    display: flex;
+    gap: 12px;
+    align-items: center;
+  }
+
+  .hud-label {
+    font-family: 'Bebas Neue', cursive;
+    font-size: 13px;
+    letter-spacing: 0.15em;
+    color: #555;
+  }
+
+  .rec-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--red);
+    opacity: 0;
+  }
+
+  .rec-dot.active {
+    opacity: 1;
+    animation: blink 0.5s step-end infinite;
+  }
+
+  @keyframes blink { 50% { opacity: 0; } }
+
+  .hud-bottom {
+    position: absolute;
+    bottom: 16px;
+    left: 16px;
+    right: 16px;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+  }
+
+  .frame-counter {
+    font-family: 'Bebas Neue', cursive;
+    font-size: 32px;
+    color: var(--white);
+    line-height: 1;
+    opacity: 0.9;
+  }
+
+  .frame-counter small {
+    font-size: 13px;
+    color: #555;
+    display: block;
+    letter-spacing: 0.1em;
+  }
+
+  /* COUNTDOWN */
+  .countdown-overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0,0,0,0.6);
+    z-index: 20;
+    display: none;
+  }
+
+  .countdown-number {
+    font-family: 'Bebas Neue', cursive;
+    font-size: 200px;
+    color: var(--white);
+    line-height: 1;
+    animation: countPop 0.8s ease-out forwards;
+  }
+
+  @keyframes countPop {
+    0% { transform: scale(1.5); opacity: 0; }
+    30% { transform: scale(1); opacity: 1; }
+    80% { opacity: 1; }
+    100% { opacity: 0; }
+  }
+
+  /* FLASH EFFECT */
+  .flash-overlay {
+    position: absolute;
+    inset: 0;
+    background: white;
+    opacity: 0;
+    z-index: 15;
+    pointer-events: none;
+    transition: opacity 0.05s;
+  }
+
+  .flash-overlay.flash {
+    opacity: 0.7;
+    transition: opacity 0.03s;
+  }
+
+  /* PROGRESS */
+  .progress-track {
+    height: 2px;
+    background: #1a1a1a;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .progress-fill {
+    height: 100%;
+    background: var(--red);
+    width: 0%;
+    transition: width 0.1s linear;
+    box-shadow: 0 0 8px var(--red);
+  }
+
+  /* CONTROLS */
+  .controls {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    gap: 16px;
+    align-items: center;
+    margin-bottom: 32px;
+  }
+
+  .settings-col {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .setting-row {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .setting-row label {
+    font-size: 10px;
+    letter-spacing: 0.25em;
+    text-transform: uppercase;
+    color: #555;
+  }
+
+  .setting-row select,
+  .setting-row input[type="range"] {
+    background: var(--gray);
+    border: 1px solid #2a2a2a;
+    color: var(--white);
+    padding: 8px 12px;
+    font-size: 13px;
+    font-family: 'Noto Sans KR', sans-serif;
+    cursor: pointer;
+    appearance: none;
+    -webkit-appearance: none;
+  }
+
+  .setting-row select {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%23666' d='M6 8L0 0h12z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 10px center;
+    padding-right: 32px;
+  }
+
+  .slider-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .slider-row input[type="range"] {
+    flex: 1;
+    padding: 0;
+    height: 2px;
+    -webkit-appearance: none;
+    background: #333;
+    border: none;
+    cursor: pointer;
+  }
+
+  .slider-row input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 14px;
+    height: 14px;
+    background: var(--white);
+    border-radius: 50%;
+    cursor: pointer;
+  }
+
+  .slider-val {
+    font-family: 'Bebas Neue', cursive;
+    font-size: 18px;
+    color: var(--amber);
+    min-width: 40px;
+    text-align: right;
+  }
+
+  /* SHUTTER BUTTON */
+  .shutter-col {
+    display: flex;
+    justify-content: center;
+  }
+
+  .shutter-btn {
+    width: 88px;
+    height: 88px;
+    border-radius: 50%;
+    background: none;
+    border: 3px solid var(--white);
+    cursor: pointer;
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform 0.15s, border-color 0.15s;
+  }
+
+  .shutter-btn:hover:not(:disabled) {
+    border-color: var(--red);
+    transform: scale(1.05);
+  }
+
+  .shutter-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+
+  .shutter-btn::before {
+    content: '';
+    width: 64px;
+    height: 64px;
+    border-radius: 50%;
+    background: var(--white);
+    transition: background 0.15s, transform 0.15s;
+  }
+
+  .shutter-btn:hover:not(:disabled)::before {
+    background: var(--red);
+    transform: scale(0.92);
+  }
+
+  .shutter-btn.recording::before {
+    background: var(--red);
+    animation: pulse 0.5s ease-in-out infinite alternate;
+  }
+
+  @keyframes pulse { to { transform: scale(0.85); } }
+
+  .shutter-label {
+    position: absolute;
+    bottom: -24px;
+    font-size: 10px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: #555;
+    white-space: nowrap;
+  }
+
+  /* START CAMERA */
+  .start-section {
+    text-align: center;
+    padding: 60px 20px;
+  }
+
+  .btn-start {
+    background: var(--white);
+    color: var(--black);
+    border: none;
+    padding: 18px 48px;
+    font-family: 'Bebas Neue', cursive;
+    font-size: 20px;
+    letter-spacing: 0.2em;
+    cursor: pointer;
+    transition: background 0.2s, transform 0.1s;
+  }
+
+  .btn-start:hover {
+    background: var(--amber);
+    transform: translateY(-2px);
+  }
+
+  /* DOWNLOAD */
+  .download-section {
+    display: none;
+    text-align: center;
+    margin-top: 8px;
+    gap: 12px;
+    justify-content: center;
+  }
+
+  .btn-dl {
+    background: none;
+    border: 1px solid var(--white);
+    color: var(--white);
+    padding: 12px 32px;
+    font-family: 'Bebas Neue', cursive;
+    font-size: 16px;
+    letter-spacing: 0.2em;
+    cursor: pointer;
+    transition: background 0.2s, color 0.2s;
+  }
+
+  .btn-dl:hover { background: var(--white); color: var(--black); }
+
+  .btn-dl.secondary {
+    border-color: #444;
+    color: #666;
+  }
+
+  .btn-dl.secondary:hover {
+    background: #444;
+    color: var(--white);
+  }
+
+  /* STATUS */
+  .status-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 0;
+    border-top: 1px solid #1a1a1a;
+    margin-top: 24px;
+  }
+
+  .status-text {
+    font-size: 11px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: #444;
+  }
+
+  .status-text.active {
+    color: var(--amber);
+  }
+
+  /* FRAMES STRIP */
+  .frames-strip {
+    display: none;
+    gap: 4px;
+    overflow-x: auto;
+    padding: 16px 0;
+    margin-top: 8px;
+    scrollbar-width: thin;
+    scrollbar-color: #333 transparent;
+  }
+
+  .frames-strip canvas {
+    width: 80px;
+    height: 45px;
+    object-fit: cover;
+    flex-shrink: 0;
+    opacity: 0.7;
+    border: 1px solid #222;
+    transition: opacity 0.2s;
+    cursor: pointer;
+  }
+
+  .frames-strip canvas:hover {
+    opacity: 1;
+    border-color: var(--amber);
+  }
+
+  .section-label {
+    font-size: 10px;
+    letter-spacing: 0.25em;
+    text-transform: uppercase;
+    color: #444;
+    margin-bottom: 4px;
+  }
+
+  /* RESPONSIVE */
+  @media (max-width: 600px) {
+    .controls {
+      grid-template-columns: 1fr;
+      grid-template-rows: auto auto auto;
+    }
+    .shutter-col { order: -1; }
+  }
+</style>
+</head>
+<body>
+
+<div class="app">
+  <header>
+    <div class="logo">STRO<span>B</span>O<br>SHOT</div>
+    <p class="tagline" id="tagline">5초 · 50프레임 · 다중 섬광 사진</p>
+  </header>
+
+  <!-- VIEWFINDER -->
+  <div class="viewfinder-wrap" id="viewfinderWrap">
+    <video id="video" autoplay playsinline muted></video>
+
+    <div class="result-canvas-wrap" id="resultWrap">
+      <canvas id="resultCanvas"></canvas>
+    </div>
+
+    <div class="hud">
+      <div class="hud-top">
+        <span class="hud-label" id="hudLabel">STANDBY</span>
+        <div class="rec-dot" id="recDot"></div>
+      </div>
+      <div class="hud-bottom">
+        <div class="frame-counter">
+          <span id="frameNum">00</span>/<span id="frameTotal">50</span>
+          <small>FRAMES</small>
+        </div>
+        <div class="hud-label" id="timeLabel">5.0s</div>
+      </div>
+    </div>
+
+    <div class="countdown-overlay" id="countdownOverlay">
+      <div class="countdown-number" id="countdownNum">3</div>
+    </div>
+
+    <div class="flash-overlay" id="flashOverlay"></div>
+
+    <!-- START PROMPT -->
+    <div class="start-section" id="startSection" style="position:absolute;inset:0;background:rgba(0,0,0,0.85);display:flex;flex-direction:column;gap:16px;align-items:center;justify-content:center;z-index:30;">
+      <p style="font-size:11px;letter-spacing:0.3em;text-transform:uppercase;color:#666;">카메라 접근 권한이 필요합니다</p>
+      <button class="btn-start" id="startBtn">카메라 시작</button>
+      <button class="btn-start" id="uploadBtn" style="background:#1a1a1a;color:#f5f0e8;border:1px solid #333;">영상 업로드</button>
+      <input type="file" id="videoFileInput" accept="video/*" style="display:none" />
+    </div>
+  </div>
+
+  <div class="progress-track">
+    <div class="progress-fill" id="progressFill"></div>
+  </div>
+
+  <!-- CONTROLS -->
+  <div class="controls" id="controlsArea" style="margin-top:24px;">
+    <div class="settings-col">
+      <div class="setting-row">
+        <label>합성 모드</label>
+        <select id="blendMode">
+          <option value="lighten">밝게 (Lighten)</option>
+          <option value="screen">스크린 (Screen)</option>
+          <option value="overlay">오버레이 (Overlay)</option>
+          <option value="difference">차이 (Difference)</option>
+          <option value="normal">일반 (Normal)</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="shutter-col">
+      <div style="position:relative;">
+        <button class="shutter-btn" id="shutterBtn" disabled>
+          <span class="shutter-label" id="shutterLabel">촬영</span>
+        </button>
+      </div>
+    </div>
+
+    <div class="settings-col" style="align-items:flex-end;">
+      <div class="setting-row" style="width:100%;">
+        <label>불투명도</label>
+        <div class="slider-row">
+          <input type="range" id="opacitySlider" min="10" max="100" value="60" step="5">
+          <span class="slider-val" id="opacityVal">60%</span>
+        </div>
+      </div>
+      <div class="setting-row" style="width:100%;">
+        <label>프레임 수</label>
+        <div class="slider-row">
+          <input type="range" id="frameSlider" min="10" max="60" value="50" step="5">
+          <span class="slider-val" id="frameVal">50</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="download-section" id="downloadSection">
+    <button class="btn-dl" id="downloadBtn">💾 이미지 저장</button>
+    <button class="btn-dl secondary" id="retakeBtn">↺ 다시 찍기</button>
+  </div>
+
+  <div class="status-bar">
+    <span class="status-text" id="statusText">카메라를 시작하거나 영상을 업로드하세요</span>
+    <span class="status-text" id="statusRight"></span>
+  </div>
+
+  <!-- FRAMES STRIP -->
+  <div id="framesStripWrap" style="display:none;">
+    <p class="section-label">추출된 프레임</p>
+    <div class="frames-strip" id="framesStrip"></div>
+  </div>
+</div>
+
+<!-- HIDDEN CANVAS -->
+<canvas id="hiddenCanvas" style="display:none;"></canvas>
+
+<script>
+const video = document.getElementById('video');
+const resultCanvas = document.getElementById('resultCanvas');
+const hiddenCanvas = document.getElementById('hiddenCanvas');
+const resultWrap = document.getElementById('resultWrap');
+const startBtn = document.getElementById('startBtn');
+const uploadBtn = document.getElementById('uploadBtn');
+const videoFileInput = document.getElementById('videoFileInput');
+const startSection = document.getElementById('startSection');
+const shutterBtn = document.getElementById('shutterBtn');
+const shutterLabel = document.getElementById('shutterLabel');
+const progressFill = document.getElementById('progressFill');
+const flashOverlay = document.getElementById('flashOverlay');
+const countdownOverlay = document.getElementById('countdownOverlay');
+const countdownNum = document.getElementById('countdownNum');
+const recDot = document.getElementById('recDot');
+const hudLabel = document.getElementById('hudLabel');
+const frameNum = document.getElementById('frameNum');
+const frameTotal = document.getElementById('frameTotal');
+const timeLabel = document.getElementById('timeLabel');
+const statusText = document.getElementById('statusText');
+const statusRight = document.getElementById('statusRight');
+const downloadSection = document.getElementById('downloadSection');
+const downloadBtn = document.getElementById('downloadBtn');
+const retakeBtn = document.getElementById('retakeBtn');
+const blendMode = document.getElementById('blendMode');
+const opacitySlider = document.getElementById('opacitySlider');
+const opacityVal = document.getElementById('opacityVal');
+const frameSlider = document.getElementById('frameSlider');
+const frameVal = document.getElementById('frameVal');
+const framesStrip = document.getElementById('framesStrip');
+const framesStripWrap = document.getElementById('framesStripWrap');
+const tagline = document.getElementById('tagline');
+
+let stream = null;
+let isRecording = false;
+let capturedFrames = [];
+let mode = 'camera'; // 'camera' | 'upload'
+let uploadedObjectUrl = null;
+
+// ===== 고정 실험값 =====
+const FIX_DURATION_MS = 5000; // 5초
+const FIX_FPS = 10;           // 10fps
+const FIX_TOTAL_FRAMES = FIX_DURATION_MS / 1000 * FIX_FPS; // 50
+
+function applyFixedSettingsUI() {
+  frameSlider.value = FIX_TOTAL_FRAMES;
+  frameVal.textContent = FIX_TOTAL_FRAMES;
+  frameTotal.textContent = FIX_TOTAL_FRAMES;
+  timeLabel.textContent = (FIX_DURATION_MS/1000).toFixed(1) + 's';
+  tagline.textContent = '5초 · 50프레임 · 다중 섬광 사진';
+}
+applyFixedSettingsUI();
+
+opacitySlider.addEventListener('input', () => {
+  opacityVal.textContent = opacitySlider.value + '%';
+});
+
+// 프레임 슬라이더는 UI는 남기되, 값은 고정(움직여도 시작 시점에 다시 50으로 맞춤)
+frameSlider.addEventListener('input', () => {
+  frameVal.textContent = frameSlider.value;
+  frameTotal.textContent = frameSlider.value;
+});
+
+uploadBtn.addEventListener('click', () => videoFileInput.click());
+
+videoFileInput.addEventListener('change', async (e) => {
+  const file = e.target.files && e.target.files[0];
+  if (!file) return;
+  await loadUploadedVideo(file);
+});
+
+startBtn.addEventListener('click', async () => {
+  await startCamera();
+});
+
+shutterBtn.addEventListener('click', () => {
+  if (isRecording) return;
+  startCapture();
+});
+
+async function startCamera() {
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } },
+      audio: false
+    });
+    mode = 'camera';
+    video.srcObject = stream;
+    video.loop = false;
+    video.muted = true;
+    await video.play();
+
+    startSection.style.display = 'none';
+    shutterBtn.disabled = false;
+    shutterLabel.textContent = '촬영';
+    statusText.textContent = '준비 완료 — 셔터를 눌러 촬영을 시작하세요';
+    setStatus('READY');
+  } catch(e) {
+    statusText.textContent = '카메라 접근 실패: ' + e.message;
+  }
+}
+
+async function loadUploadedVideo(file) {
+  // 카메라 스트림 종료(있으면)
+  if (stream) {
+    try { stream.getTracks().forEach(t => t.stop()); } catch {}
+    stream = null;
+  }
+  mode = 'upload';
+
+  if (uploadedObjectUrl) URL.revokeObjectURL(uploadedObjectUrl);
+  uploadedObjectUrl = URL.createObjectURL(file);
+
+  video.srcObject = null;
+  video.src = uploadedObjectUrl;
+  video.loop = false;
+  video.muted = true;
+
+  // metadata 로드
+  await new Promise((res, rej) => {
+    video.onloadedmetadata = () => res();
+    video.onerror = () => rej(new Error('동영상 로드 실패'));
+  });
+
+  // 첫 프레임 보여주기
+  video.currentTime = 0;
+  await new Promise(r => video.onseeked = () => r());
+  await video.play();
+  video.pause(); // 업로드 모드에서는 정지 상태로 시작
+
+  startSection.style.display = 'none';
+  shutterBtn.disabled = false;
+  shutterLabel.textContent = '합성';
+  statusText.textContent = '업로드 완료 — 셔터를 눌러 5초 구간을 10fps로 합성합니다';
+  setStatus('READY');
+  statusRight.textContent = `${Math.min(video.duration, 5).toFixed(1)}s 구간 사용`;
+}
+
+async function startCapture() {
+  isRecording = true;
+  shutterBtn.disabled = true;
+  shutterBtn.classList.add('recording');
+  downloadSection.style.display = 'none';
+  resultWrap.style.display = 'none';
+  capturedFrames = [];
+  framesStrip.innerHTML = '';
+  framesStripWrap.style.display = 'none';
+
+  // 고정값 적용(시작할 때마다 강제)
+  applyFixedSettingsUI();
+
+  // COUNTDOWN (카메라 모드만)
+  if (mode === 'camera') {
+    await countdown();
+  }
+
+  // RECORD / EXTRACT
+  const totalFrames = FIX_TOTAL_FRAMES;
+  const durationMs = FIX_DURATION_MS;
+  const intervalMs = durationMs / totalFrames;
+  frameTotal.textContent = totalFrames;
+  frameNum.textContent = '00';
+
+  hudLabel.textContent = (mode === 'camera') ? 'REC' : 'EXTRACT';
+  recDot.classList.add('active');
+  setStatus(mode === 'camera' ? '촬영 중...' : '프레임 추출 중...');
+
+  const startTime = Date.now();
+
+  if (mode === 'camera') {
+    for (let i = 0; i < totalFrames; i++) {
+      if (!isRecording) break;
+
+      const frameCanvas = document.createElement('canvas');
+      frameCanvas.width = video.videoWidth || 1280;
+      frameCanvas.height = video.videoHeight || 720;
+      const ctx = frameCanvas.getContext('2d');
+      ctx.drawImage(video, 0, 0, frameCanvas.width, frameCanvas.height);
+      capturedFrames.push(frameCanvas);
+
+      triggerFlash();
+
+      const progress = ((i + 1) / totalFrames) * 100;
+      progressFill.style.width = progress + '%';
+      frameNum.textContent = String(i + 1).padStart(2, '0');
+
+      const elapsed = Date.now() - startTime;
+      const remaining = Math.max(0, (durationMs - elapsed) / 1000);
+      timeLabel.textContent = remaining.toFixed(1) + 's';
+
+      const nextTime = startTime + (i + 1) * intervalMs;
+      const waitMs = nextTime - Date.now();
+      if (waitMs > 0) await sleep(waitMs);
+    }
+  } else {
+    // 업로드 동영상 모드: 0~5초 구간을 10fps로 seek 추출
+    const usableSec = Math.min(video.duration || 0, durationMs/1000);
+    const usableFrames = Math.max(1, Math.floor(usableSec * FIX_FPS));
+    // UI는 50으로 유지하지만, 실제는 영상 길이에 맞춰 줄어들 수 있음
+    frameTotal.textContent = usableFrames;
+    for (let i = 0; i < usableFrames; i++) {
+      const t = i * (1 / FIX_FPS);
+      video.currentTime = t;
+      await new Promise(r => video.onseeked = () => r());
+
+      const frameCanvas = document.createElement('canvas');
+      frameCanvas.width = video.videoWidth || 1280;
+      frameCanvas.height = video.videoHeight || 720;
+      const ctx = frameCanvas.getContext('2d');
+      ctx.drawImage(video, 0, 0, frameCanvas.width, frameCanvas.height);
+      capturedFrames.push(frameCanvas);
+
+      triggerFlash();
+
+      const progress = ((i + 1) / usableFrames) * 100;
+      progressFill.style.width = progress + '%';
+      frameNum.textContent = String(i + 1).padStart(2, '0');
+
+      const remaining = Math.max(0, (usableSec - t));
+      timeLabel.textContent = remaining.toFixed(1) + 's';
+      await sleep(0);
+    }
+  }
+
+  hudLabel.textContent = 'PROCESSING';
+  recDot.classList.remove('active');
+  setStatus('합성 처리 중...');
+  await sleep(50);
+
+  compositeFrames();
+  showFramesStrip();
+
+  isRecording = false;
+  shutterBtn.disabled = false;
+  shutterBtn.classList.remove('recording');
+  progressFill.style.width = '100%';
+  setTimeout(() => { progressFill.style.width = '0%'; }, 1000);
+  hudLabel.textContent = 'DONE';
+  timeLabel.textContent = '0.0s';
+  setStatus('완성!');
+  downloadSection.style.display = 'flex';
+
+  // 업로드 모드에서는 결과 후에도 정지 유지
+  if (mode === 'upload') {
+    try { video.pause(); } catch {}
+  }
+}
+
+function countdown() {
+  return new Promise(resolve => {
+    countdownOverlay.style.display = 'flex';
+    let count = 3;
+    countdownNum.textContent = count;
+    countdownNum.style.animation = 'none';
+    countdownNum.offsetHeight;
+    countdownNum.style.animation = 'countPop 0.8s ease-out forwards';
+
+    const tick = setInterval(() => {
+      count--;
+      if (count <= 0) {
+        clearInterval(tick);
+        countdownOverlay.style.display = 'none';
+        resolve();
+      } else {
+        countdownNum.textContent = count;
+        countdownNum.style.animation = 'none';
+        countdownNum.offsetHeight;
+        countdownNum.style.animation = 'countPop 0.8s ease-out forwards';
+      }
+    }, 900);
+  });
+}
+
+function triggerFlash() {
+  flashOverlay.classList.add('flash');
+  setTimeout(() => flashOverlay.classList.remove('flash'), 80);
+}
+
+function compositeFrames() {
+  if (capturedFrames.length === 0) return;
+
+  const w = capturedFrames[0].width;
+  const h = capturedFrames[0].height;
+  resultCanvas.width = w;
+  resultCanvas.height = h;
+  const ctx = resultCanvas.getContext('2d');
+
+  const opacity = parseInt(opacitySlider.value) / 100;
+  const modeOp = blendMode.value;
+
+  // Draw first frame at full opacity as base
+  ctx.globalAlpha = 1;
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.drawImage(capturedFrames[0], 0, 0);
+
+  // Composite remaining frames
+  ctx.globalAlpha = opacity;
+  ctx.globalCompositeOperation = modeOp;
+
+  for (let i = 1; i < capturedFrames.length; i++) {
+    ctx.drawImage(capturedFrames[i], 0, 0);
+  }
+
+  resultWrap.style.display = 'block';
+  statusRight.textContent = `${capturedFrames.length}프레임 합성 (${mode === 'camera' ? '카메라' : '업로드'})`;
+}
+
+function showFramesStrip() {
+  framesStrip.innerHTML = '';
+  const step = Math.max(1, Math.floor(capturedFrames.length / 20));
+  for (let i = 0; i < capturedFrames.length; i += step) {
+    const c = capturedFrames[i];
+    const thumb = document.createElement('canvas');
+    thumb.width = 160;
+    thumb.height = 90;
+    const ctx = thumb.getContext('2d');
+    ctx.drawImage(c, 0, 0, 160, 90);
+    framesStrip.appendChild(thumb);
+  }
+  framesStripWrap.style.display = 'block';
+}
+
+downloadBtn.addEventListener('click', () => {
+  const link = document.createElement('a');
+  link.download = `stroboshot_${Date.now()}.png`;
+  link.href = resultCanvas.toDataURL('image/png');
+  link.click();
+});
+
+retakeBtn.addEventListener('click', () => {
+  resultWrap.style.display = 'none';
+  downloadSection.style.display = 'none';
+  framesStripWrap.style.display = 'none';
+  capturedFrames = [];
+  framesStrip.innerHTML = '';
+  hudLabel.textContent = 'READY';
+  frameNum.textContent = '00';
+  timeLabel.textContent = (FIX_DURATION_MS/1000).toFixed(1) + 's';
+  statusRight.textContent = '';
+  setStatus('READY');
+
+  // 다시 찍기는 현재 모드 유지
+  if (mode === 'upload') {
+    statusText.textContent = '업로드 완료 — 셔터를 눌러 5초 구간을 10fps로 합성합니다';
+    shutterLabel.textContent = '합성';
+  } else {
+    statusText.textContent = '준비 완료 — 셔터를 눌러 촬영을 시작하세요';
+    shutterLabel.textContent = '촬영';
+  }
+});
+
+function setStatus(msg) {
+  statusText.textContent = msg;
+  const isActive = msg.includes('중') || msg === '완성!';
+  statusText.className = 'status-text' + (isActive ? ' active' : '');
+}
+
+function sleep(ms) {
+  return new Promise(r => setTimeout(r, ms));
+}
+</script>
+</body>
+</html>
